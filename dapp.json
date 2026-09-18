@@ -230,5 +230,5 @@
     "build": "private",
     "view": "public"
   },
-  "name": "Todo List"
+  "name": "Our Todo List"
 }

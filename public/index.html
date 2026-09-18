@@ -1509,12 +1509,62 @@
       set.add(v ? id : -id);
       persistCollapsed();
     }
+    // --- category open/close animation (issue #72) -------------------------------
+    // The toggle repaints the card (an outerHTML swap), which snapped open and
+    // shut. Opening: repaint first, so the rows exist, then grow the new body
+    // from 0 to its height under overflow:hidden. Closing: shrink the OLD body
+    // to 0 first, then repaint — the rows slide away under the header instead
+    // of vanishing and leaving a blank card to shrink. Height on the .un-group
+    // only: the section's own margin stays put, so everything below moves
+    // exactly as far as the rows do. Same guards and easing as flipRows —
+    // reduced motion, or a browser without Element.animate, gets the old
+    // snap, which is still correct, just not animated.
+    const COLLAPSE_MS = 220;
+    function catBody(catId) {
+      const sec = document.getElementById('cat-' + catId);
+      return sec ? sec.querySelector(':scope > .un-group') : null;
+    }
+    function canAnimateCollapse() {
+      return !prefersReducedMotion() && typeof Element.prototype.animate === 'function';
+    }
+    // Resolves when the animation is over, however it ended; the element is
+    // left as the layout wants it.
+    function animateBodyHeight(el, from, to) {
+      el.style.overflow = 'hidden';
+      let anim;
+      try {
+        anim = el.animate(
+          [{ height: from + 'px' }, { height: to + 'px' }],
+          { duration: COLLAPSE_MS, easing: FLIP_EASE }
+        );
+      } catch (_) {
+        el.style.overflow = '';
+        return Promise.resolve();
+      }
+      return anim.finished.catch(() => {}).then(() => { el.style.overflow = ''; });
+    }
     function toggleCatCollapsed(catId) {
       // Same guard as toggleCatDone: mid-search the header renders without its
       // chevron and the filter owns what's visible, so don't mutate behind it.
       if (searchActive()) return;
-      setCatCollapsed(catId, !catCollapsed(catId));
+      const closing = !catCollapsed(catId);
+      const body = canAnimateCollapse() ? catBody(catId) : null;
+      if (closing && body) {
+        const h = body.getBoundingClientRect().height;
+        setCatCollapsed(catId, true);
+        // The chevron turns now, with the rows; the repaint makes it official.
+        const btn = document.querySelector('#cat-' + catId + ' .cat-toggle');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        animateBodyHeight(body, h, 0).then(() => repaintCategory(catId));
+        return;
+      }
+      setCatCollapsed(catId, closing);
       repaintCategory(catId);
+      if (!closing && canAnimateCollapse()) {
+        const grown = catBody(catId);
+        const h = grown ? grown.getBoundingClientRect().height : 0;
+        if (grown && h > 0) animateBodyHeight(grown, 0, h);
+      }
     }
 
     // Categories whose "Add an item…" input is currently revealed by the

@@ -228,7 +228,7 @@
   ],
   "visibility": {
     "build": "private",
-    "view": "public"
+    "view": "private"
   },
   "name": "Our Todo List"
 }
